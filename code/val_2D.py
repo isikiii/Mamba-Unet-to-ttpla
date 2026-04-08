@@ -19,11 +19,16 @@ def calculate_metric_percase(pred, gt):
 
 def test_single_volume(image, label, net, classes, patch_size=[256, 256]):
     # 针对 2D RGB 图像的验证代码
-    image = image.cpu().detach().numpy()  # [1, 3, H, W]
+    image = image.cpu().detach().numpy()
     label = label.squeeze(0).cpu().detach().numpy()  # [H, W]
 
     # 提取单张图像
-    img = image[0]  # [3, H, W]
+    img = image[0]
+
+    # 【核心修复】：如果读进来的图像是 [H, W, C] (最后一个维度是3)，强制翻转为 [C, H, W]
+    if img.shape[-1] == 3:
+        img = np.transpose(img, (2, 0, 1))
+
     c, x, y = img.shape
 
     # 缩放到网络要求的尺寸 (注意：通道维度 c=3 保持不变，缩放因子设为 1)
@@ -31,7 +36,7 @@ def test_single_volume(image, label, net, classes, patch_size=[256, 256]):
         img = zoom(img, (1, patch_size[0] / x, patch_size[1] / y), order=0)
 
     # 转为 Tensor 并送入 GPU
-    input = torch.from_numpy(img).unsqueeze(0).float().cuda()  # [1, 3, 512, 512]
+    input = torch.from_numpy(img).unsqueeze(0).float().cuda()
 
     net.eval()
     with torch.no_grad():

@@ -152,7 +152,11 @@ def train(args, snapshot_path):
 
     optimizer = optim.SGD(model.parameters(), lr=base_lr,
                           momentum=0.9, weight_decay=0.0001)
+
+    # 1. 恢复最原始的交叉熵，不带任何权重
     ce_loss = CrossEntropyLoss()
+
+    # 2. 恢复普通的 Dice Loss 初始化
     dice_loss = losses.DiceLoss(num_classes)
 
     writer = SummaryWriter(snapshot_path + '/log')
@@ -171,9 +175,13 @@ def train(args, snapshot_path):
             outputs = model(volume_batch)
             outputs_soft = torch.softmax(outputs, dim=1)
 
+            # 恢复最原始的 Loss 计算，不传任何 weight 参数
             loss_ce = ce_loss(outputs, label_batch[:].long())
             loss_dice = dice_loss(outputs_soft, label_batch.unsqueeze(1))
+
+            # 恢复最原始的 1:1 比例
             loss = 0.5 * (loss_dice + loss_ce)
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()

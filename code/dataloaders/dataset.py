@@ -110,11 +110,6 @@ class BaseDataSets(Dataset):
                 sample = self.transform(sample, self.ops_weak, self.ops_strong)
             else:
                 sample = self.transform(sample)
-        elif self.split == "val":
-            # 验证集也必须转成 Tensor，并把 [H, W, C] 换位成 [C, H, W]
-            image = torch.from_numpy(image.astype(np.float32)).permute(2, 0, 1)
-            label = torch.from_numpy(label.astype(np.uint8))
-            sample = {"image": image, "label": label}
 
         sample["idx"] = idx
         return sample
@@ -203,17 +198,6 @@ def random_rotate(image, label):
     return image, label
 
 
-def color_jitter(image):
-    if not torch.is_tensor(image):
-        np_to_tensor = transforms.ToTensor()
-        image = np_to_tensor(image)
-
-    # s is the strength of color distortion.
-    s = 1.0
-    jitter = transforms.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s)
-    return jitter(image)
-
-
 class CTATransform(object):
     def __init__(self, output_size, cta):
         self.output_size = output_size
@@ -292,8 +276,8 @@ class WeakStrongAugment(object):
 
     def __call__(self, sample):
         image, label = sample["image"], sample["label"]
-        image = self.resize(image, is_label=False)  # 传入标记
-        label = self.resize(label, is_label=True)  # 传入标记
+        image = self.resize(image)
+        label = self.resize(label)
         # 弱增强
         image_weak, label = random_rot_flip(image, label)
         # 强增强
@@ -312,13 +296,9 @@ class WeakStrongAugment(object):
         }
         return sample
 
-    def resize(self, img_data, is_label=False):
-        if is_label:
-            x, y = img_data.shape
-            return zoom(img_data, (self.output_size[0] / x, self.output_size[1] / y), order=0)
-        else:
-            x, y, c = img_data.shape
-            return zoom(img_data, (self.output_size[0] / x, self.output_size[1] / y, 1), order=0)
+    def resize(self, image):
+        x, y, c = image.shape  # 增加通道维度的解包
+        return zoom(image, (self.output_size[0] / x, self.output_size[1] / y, 1), order=0)
 
 
 class TwoStreamBatchSampler(Sampler):
