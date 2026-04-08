@@ -42,6 +42,28 @@ _C.DATA.NUM_WORKERS = 8
 # Model settings
 # -----------------------------------------------------------------------------
 _C.MODEL = CN()
+
+# --- 添加以下内容开始 ---
+_C.MODEL.VSSM = CN()
+_C.MODEL.VSSM.PATCH_SIZE = 4
+_C.MODEL.VSSM.IN_CHANS = 3
+_C.MODEL.VSSM.EMBED_DIM = 96
+_C.MODEL.VSSM.DEPTHS = [ 2, 2, 9, 2 ]
+_C.MODEL.VSSM.MLP_RATIO = 4.0
+_C.MODEL.VSSM.DROP_RATE = 0.0
+_C.MODEL.VSSM.DROP_PATH_RATE = 0.1
+_C.MODEL.VSSM.PATCH_NORM = True
+_C.MODEL.VSSM.DT_RANK = "auto"
+_C.MODEL.VSSM.SSM_RATIO = 2.0
+_C.MODEL.VSSM.SSA_CONV = 3
+_C.MODEL.VSSM.SSA_SCONV = True
+_C.MODEL.VSSM.SSA_DCONV = 1
+_C.MODEL.VSSM.SSA_EXPANSION = 2
+_C.MODEL.VSSM.SSA_GCONV = 1
+_C.MODEL.VSSM.SSA_BIAS = True
+_C.MODEL.VSSM.SSA_RM_BIAS = True
+# --- 添加内容结束 ---
+
 # Model type
 _C.MODEL.TYPE = 'swin'
 # Model name

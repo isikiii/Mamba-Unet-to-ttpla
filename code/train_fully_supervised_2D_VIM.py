@@ -37,7 +37,7 @@ parser.add_argument('--exp', type=str,
                     default='ACDC/Fully_Supervised', help='experiment_name')
 parser.add_argument('--model', type=str,
                     default='mambaunet', help='model_name')
-parser.add_argument('--num_classes', type=int,  default=4,
+parser.add_argument('--num_classes', type=int,  default=3,
                     help='output channel of network')
 
 parser.add_argument(
@@ -76,8 +76,8 @@ parser.add_argument('--deterministic', type=int,  default=1,
                     help='whether use deterministic training')
 parser.add_argument('--base_lr', type=float,  default=0.01,
                     help='segmentation network learning rate')
-parser.add_argument('--patch_size', type=list,  default=[224, 224],
-                    help='patch size of network input')
+parser.add_argument('--patch_size', type=int, nargs='+',
+                    default=[512, 512], help='patch size of network input')
 parser.add_argument('--seed', type=int,  default=1337, help='random seed')
 parser.add_argument('--labeled_num', type=int, default=140,
                     help='labeled data')
@@ -102,24 +102,43 @@ def train(args, snapshot_path):
     batch_size = args.batch_size
     max_iterations = args.max_iterations
 
-    labeled_slice = patients_to_slices(args.root_path, args.labeled_num)
+    # --- 1. 读取训练集列表 (确保去掉换行符) ---
+    train_list_path = os.path.join(args.root_path, "train.list")
+    with open(train_list_path, 'r') as f:
+        # 使用 .strip() 彻底干掉 \n
+        labeled_slice = [line.strip() for line in f.readlines() if line.strip()]
 
-    # model = net_factory(net_type=args.model, in_chns=1, class_num=num_classes)
+    print(f"Total labeled samples: {len(labeled_slice)}")
 
-
-
-
-    model = VIM_seg(config, img_size=args.patch_size,
-                     num_classes=args.num_classes).cuda()
+    # --- 2. 实例化模型 ---
+    # 注意：根据你之前的报错，如果 MambaUnet 不支持 in_chans 参数，
+    # 请确保在 mamba_sys.py 里把 VSSM 的默认值改成了 3。
+    model = VIM_seg(config,
+                    img_size=args.patch_size[0],
+                    num_classes=args.num_classes).cuda()
     model.load_from(config)
 
+    # --- 3. 实例化训练集 ---
+    db_train = BaseDataSets(base_dir=args.root_path,
+                            split="train",
+                            num=None,
+                            transform=transforms.Compose([
+                                RandomGenerator(args.patch_size)
+                            ]),
+                            list_name=labeled_slice)  # 传入处理好的列表
 
+    # --- 4. 读取并实例化验证集 (修正这里的逻辑错误) ---
+    val_list_path = os.path.join(args.root_path, "val.list")
+    with open(val_list_path, 'r') as f:
+        # 同样必须使用 .strip()，否则就会报你看到的 \n.png 错误
+        val_slice = [line.strip() for line in f.readlines() if line.strip()]
 
+    # 修正点：必须把 val_slice 传给 list_name
+    db_val = BaseDataSets(base_dir=args.root_path,
+                          split="val",
+                          list_name=val_slice)
 
-    db_train = BaseDataSets(base_dir=args.root_path, split="train", num=labeled_slice, transform=transforms.Compose([
-        RandomGenerator(args.patch_size)
-    ]))
-    db_val = BaseDataSets(base_dir=args.root_path, split="val")
+    print(f"Total validation samples: {len(val_slice)}")
 
     def worker_init_fn(worker_id):
         random.seed(args.seed + worker_id)

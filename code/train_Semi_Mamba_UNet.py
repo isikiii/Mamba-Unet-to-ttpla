@@ -26,6 +26,7 @@ from networks.net_factory import net_factory
 from networks.vision_transformer import SwinUnet as ViT_seg
 from utils import losses, metrics, ramps
 from val_2D import test_single_volume
+from utils.losses import ConstraLoss
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--root_path', type=str,
@@ -150,9 +151,9 @@ def train(args, snapshot_path):
     #             param.detach_()
     #     return model
 
-    model2 = ViM_seg(config, img_size=args.patch_size,
+    model1 = ViM_seg(config, img_size=args.patch_size,
                      num_classes=args.num_classes).cuda()
-    model2.load_from(config)
+    model1.load_from(config)
 
     model2 = ViM_seg(config, img_size=args.patch_size,
                      num_classes=args.num_classes).cuda()
@@ -230,7 +231,6 @@ def train(args, snapshot_path):
             pseudo_supervision2 = dice_loss(
                 outputs_soft2[args.labeled_bs:], pseudo_outputs1.unsqueeze(1))
 
-            from utils.losses import ConstraLoss
             con1 = ConstraLoss(outputs1,outputs2)
 
             # model1_loss = loss1 + consistency_weight * pseudo_supervision1

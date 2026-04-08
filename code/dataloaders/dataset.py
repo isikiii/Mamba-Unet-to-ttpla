@@ -26,6 +26,7 @@ class BaseDataSets(Dataset):
         transform=None,
         ops_weak=None,
         ops_strong=None,
+        list_name=None,
     ):
         self._base_dir = base_dir
         self.sample_list = []
@@ -34,14 +35,38 @@ class BaseDataSets(Dataset):
         self.ops_weak = ops_weak
         self.ops_strong = ops_strong
 
+        # 修改逻辑：如果有外部传入的 list_name，就用它；否则去读默认文件
+        if list_name is not None:
+            self.sample_list = list_name
+        elif self.split == 'train':
+            with open(self._base_dir + '/train.list', 'r') as f:
+                self.sample_list = f.readlines()
+        elif self.split == 'val':
+            with open(self._base_dir + '/val.list', 'r') as f:
+                self.sample_list = f.readlines()
+
+        self.sample_list = [item.replace('\n', '') for item in self.sample_list]
+
         assert bool(ops_weak) == bool(
             ops_strong
         ), "For using CTAugment learned policies, provide both weak and strong batch augmentation policy"
 
-        if self.split == "train":
-            with open(self._base_dir + "/train_slices.list", "r") as f1:
-                self.sample_list = f1.readlines()
-            self.sample_list = [item.replace("\n", "") for item in self.sample_list]
+        if list_name is not None:
+            # 如果你在 train_fully_supervised_2D_VIM.py 里传了 labeled_slice，就用它
+            self.sample_list = list_name
+        elif self.split == 'train':
+            # 自动尝试读取 train.list (TTPLA格式) 或 train_slices.list (原版格式)
+            list_path = os.path.join(self._base_dir, "train.list")
+            if not os.path.exists(list_path):
+                list_path = os.path.join(self._base_dir, "train_slices.list")
+
+            with open(list_path, "r") as f:
+                self.sample_list = f.readlines()
+        elif self.split == 'val':
+            # 同样逻辑处理验证集
+            list_path = os.path.join(self._base_dir, "val.list")
+            with open(list_path, "r") as f:
+                self.sample_list = f.readlines()
             # # 计算要选择的数据数量（10%）
             # num_samples = len(self.sample_list)
             # num_samples_to_select = int(1 * num_samples)
@@ -63,14 +88,17 @@ class BaseDataSets(Dataset):
     def __getitem__(self, idx):
         case = self.sample_list[idx]
 
-        # 假设你的原图放在 images 文件夹，标签图放在 masks 文件夹
-        # 请根据你实际的文件夹名称修改路径
-        img_path = os.path.join(self._base_dir, "images", "{}.jpg".format(case))
-        lbl_path = os.path.join(self._base_dir, "masks", "{}.png".format(case))
+        # 修正：根据报错显示，图片后缀应为 .jpg
+        img_path = os.path.join(self._base_dir, self.split, "images", "{}.jpg".format(case))
+        lbl_path = os.path.join(self._base_dir, self.split, "masks", "{}.png".format(case))
 
-        # 使用 PIL 读取并确保通道数正确
-        image = Image.open(img_path).convert('RGB')  # 航拍图转为 RGB 三通道
-        label = Image.open(lbl_path).convert('L')  # 标签图转为灰度（单通道）
+        # 如果你的图片确实也是 .png，请把上面改成 .png
+        # 如果不确定，可以写一个简单的兼容逻辑：
+        if not os.path.exists(img_path):
+            img_path = img_path.replace(".jpg", ".png")
+
+        image = Image.open(img_path).convert('RGB')  # 确保 RGB [cite: 1, 4]
+        label = Image.open(lbl_path).convert('L')  # 确保灰度标签 [cite: 1, 4]
 
         image = np.array(image)
         label = np.array(label)
@@ -82,6 +110,11 @@ class BaseDataSets(Dataset):
                 sample = self.transform(sample, self.ops_weak, self.ops_strong)
             else:
                 sample = self.transform(sample)
+        elif self.split == "val":
+            # 验证集也必须转成 Tensor，并把 [H, W, C] 换位成 [C, H, W]
+            image = torch.from_numpy(image.astype(np.float32)).permute(2, 0, 1)
+            label = torch.from_numpy(label.astype(np.uint8))
+            sample = {"image": image, "label": label}
 
         sample["idx"] = idx
         return sample
@@ -259,8 +292,8 @@ class WeakStrongAugment(object):
 
     def __call__(self, sample):
         image, label = sample["image"], sample["label"]
-        image = self.resize(image)
-        label = self.resize(label)
+        image = self.resize(image, is_label=False)  # 传入标记
+        label = self.resize(label, is_label=True)  # 传入标记
         # 弱增强
         image_weak, label = random_rot_flip(image, label)
         # 强增强
@@ -279,9 +312,13 @@ class WeakStrongAugment(object):
         }
         return sample
 
-    def resize(self, image):
-        x, y, c = image.shape  # 增加通道维度的解包
-        return zoom(image, (self.output_size[0] / x, self.output_size[1] / y, 1), order=0)
+    def resize(self, img_data, is_label=False):
+        if is_label:
+            x, y = img_data.shape
+            return zoom(img_data, (self.output_size[0] / x, self.output_size[1] / y), order=0)
+        else:
+            x, y, c = img_data.shape
+            return zoom(img_data, (self.output_size[0] / x, self.output_size[1] / y, 1), order=0)
 
 
 class TwoStreamBatchSampler(Sampler):
