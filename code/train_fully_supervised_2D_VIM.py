@@ -113,10 +113,13 @@ def train(args, snapshot_path):
     # --- 2. 实例化模型 ---
     # 注意：根据你之前的报错，如果 MambaUnet 不支持 in_chans 参数，
     # 请确保在 mamba_sys.py 里把 VSSM 的默认值改成了 3。
-    model = VIM_seg(config,
-                    img_size=args.patch_size[0],
-                    num_classes=args.num_classes).cuda()
-    model.load_from(config)
+    #model = VIM_seg(config,
+    #                img_size=args.patch_size[0],
+    #                num_classes=args.num_classes).cuda()
+    #model.load_from(config)
+
+    # --- 2. 实例化模型 (使用动态工厂模式) ---
+    model = net_factory(net_type=args.model, in_chns=3, class_num=args.num_classes)
 
     # --- 3. 实例化训练集 ---
     db_train = BaseDataSets(base_dir=args.root_path,

@@ -8,6 +8,7 @@ from PIL import Image, ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 from tqdm import tqdm
 from scipy.ndimage import zoom
+from networks.net_factory import net_factory
 from medpy import metric
 
 from networks.vision_mamba import MambaUnet as ViM_seg
@@ -37,7 +38,6 @@ parser.add_argument('--tag', help='tag of experiment')
 parser.add_argument('--eval', action='store_true')
 parser.add_argument('--throughput', action='store_true')
 parser.add_argument('--batch_size', type=int, default=1)
-
 
 def calculate_metric_percase(pred, gt):
     pred[pred > 0] = 1
@@ -85,7 +85,12 @@ def Inference(FLAGS):
     if not os.path.exists(test_save_path): os.makedirs(test_save_path)
 
     config = get_config(FLAGS)
-    net = ViM_seg(config, img_size=FLAGS.patch_size, num_classes=FLAGS.num_classes).cuda()
+    # 根据命令行参数判断：如果是 mambaunet 就用原逻辑，否则去工厂里找（比如 unet）
+    if FLAGS.model == 'mambaunet':
+        net = ViM_seg(config, img_size=FLAGS.patch_size[0], num_classes=FLAGS.num_classes).cuda()
+    else:
+        # 注意：这里传入 in_chns=3 以适配你的三通道优化 [cite: 309, 404]
+        net = net_factory(net_type=FLAGS.model, in_chns=3, class_num=FLAGS.num_classes)
 
     load_path = FLAGS.save_mode_path if FLAGS.save_mode_path else os.path.join(
         "../model/{}_{}/{}".format(FLAGS.exp, FLAGS.labeled_num, FLAGS.model), 'mambaunet_best_model.pth')

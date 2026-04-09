@@ -68,8 +68,9 @@ parser.add_argument('--consistency', type=float,
                     default=0.1, help='consistency')
 parser.add_argument('--consistency_rampup', type=float,
                     default=200.0, help='consistency_rampup')
-args = parser.parse_args()
-config = get_config(args)
+if __name__ == "__main__":
+    args = parser.parse_args()
+    config = get_config(args)
 
 
 def net_factory(net_type="unet", in_chns=1, class_num=4):
